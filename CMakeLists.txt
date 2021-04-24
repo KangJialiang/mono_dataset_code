@@ -37,15 +37,17 @@ target_link_libraries(playDataset ${OpenCV_LIBS} ${LIBZIP_LIBRARY})
 
 
 SET(CMAKE_MODULE_PATH ${CMAKE_INSTALL_PREFIX}/lib/cmake/ )
-find_package(aruco)
+# find_package(aruco)
 
-IF(aruco_FOUND)
-	add_executable(vignetteCalib src/main_vignetteCalib.cpp src/FOVUndistorter.cpp src/PhotometricUndistorter.cpp)
-	target_link_libraries(vignetteCalib ${OpenCV_LIBS} ${aruco_LIBS} ${LIBZIP_LIBRARY})
-ELSE()
-	message("================ aruco not found. not compiling vignetteCalib. ========================")
-ENDIF()
+# IF(aruco_FOUND)
+# 	add_executable(vignetteCalib src/main_vignetteCalib.cpp src/FOVUndistorter.cpp src/PhotometricUndistorter.cpp)
+# 	target_link_libraries(vignetteCalib ${OpenCV_LIBS} ${aruco_LIBS} ${LIBZIP_LIBRARY})
+# ELSE()
+# 	message("================ aruco not found. not compiling vignetteCalib. ========================")
+# ENDIF()
 
+add_executable(vignetteCalib src/main_vignetteCalib.cpp src/FOVUndistorter.cpp src/PhotometricUndistorter.cpp)
+target_link_libraries(vignetteCalib ${OpenCV_LIBS} ${LIBZIP_LIBRARY})
 
 
 

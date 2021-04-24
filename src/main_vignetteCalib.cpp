@@ -33,8 +33,9 @@
 #include "opencv2/opencv.hpp"
 #include "opencv2/video/tracking.hpp"
 
-#include <aruco/aruco.h>
-#include <aruco/cvdrawingutils.h>
+// #include <aruco/aruco.h>
+// #include <aruco/cvdrawingutils.h>
+#include <opencv2/aruco.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
 #include "BenchmarkDatasetReader.h"
@@ -209,7 +210,7 @@ int main( int argc, char** argv )
 	w_out = reader->getUndistorter()->getOutputDims()[0];
 	h_out = reader->getUndistorter()->getOutputDims()[1];
 
-	aruco::MarkerDetector MDetector;
+	// aruco::MarkerDetector MDetector;
 
 	std::vector<float*> images;
 	std::vector<float*> p2imgX;
@@ -229,22 +230,29 @@ int main( int argc, char** argv )
 
 	for(int i=0;i<reader->getNumImages();i+=imageSkip)
 	{
-        std::vector<aruco::Marker> Markers;
+        // std::vector<aruco::Marker> Markers;
+		std::vector<int> markerIds;
+		std::vector<std::vector<cv::Point2f>> markerCorners;
+		cv::Ptr<cv::aruco::Dictionary> arucoDict = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_ARUCO_ORIGINAL);
+
 		ExposureImage* img = reader->getImage(i,true, false, false, false);
 
 		cv::Mat InImage;
 		cv::Mat(h_out, w_out, CV_32F, img->image).convertTo(InImage, CV_8U, 1, 0);
 		delete img;
 
-		MDetector.detect(InImage,Markers);
-		if(Markers.size() != 1) continue;
+		// MDetector.detect(InImage,Markers);
+		// if(Markers.size() != 1) continue;
+		cv::aruco::detectMarkers(InImage, arucoDict, markerCorners, markerIds);
+		if (markerCorners.size() != 1) continue;
 
-        std::vector<cv::Point2f> ptsP;
+		std::vector<cv::Point2f> ptsP;
         std::vector<cv::Point2f> ptsI;
-		ptsI.push_back(cv::Point2f(Markers[0][0].x, Markers[0][0].y));
-		ptsI.push_back(cv::Point2f(Markers[0][1].x, Markers[0][1].y));
-		ptsI.push_back(cv::Point2f(Markers[0][2].x, Markers[0][2].y));
-		ptsI.push_back(cv::Point2f(Markers[0][3].x, Markers[0][3].y));
+		// ptsI.push_back(cv::Point2f(Markers[0][0].x, Markers[0][0].y));
+		// ptsI.push_back(cv::Point2f(Markers[0][1].x, Markers[0][1].y));
+		// ptsI.push_back(cv::Point2f(Markers[0][2].x, Markers[0][2].y));
+		// ptsI.push_back(cv::Point2f(Markers[0][3].x, Markers[0][3].y));
+		ptsI = markerCorners[0];
 		ptsP.push_back(cv::Point2f(-0.5,0.5));
 		ptsP.push_back(cv::Point2f(0.5,0.5));
 		ptsP.push_back(cv::Point2f(0.5,-0.5));
@@ -321,7 +329,7 @@ int main( int argc, char** argv )
 				int v_dT = plane2imgY[idxT]+0.5;
 
 				if(u_dS>=0 && v_dS >=0 && u_dS<wI && v_dS<hI && u_dT>=0 && v_dT >=0 && u_dT<wI && v_dT<hI)
-					cv::line(dbgImg, cv::Point(u_dS, v_dS), cv::Point(u_dT, v_dT), cv::Scalar(0,0,255), 10, CV_AA);
+					cv::line(dbgImg, cv::Point(u_dS, v_dS), cv::Point(u_dT, v_dT), cv::Scalar(0,0,255), 10, cv::LINE_AA);
 			}
 
 
@@ -338,7 +346,7 @@ int main( int argc, char** argv )
 				int v_dT = plane2imgY[idxT]+0.5;
 
 				if(u_dS>=0 && v_dS >=0 && u_dS<wI && v_dS<hI && u_dT>=0 && v_dT >=0 && u_dT<wI && v_dT<hI)
-					cv::line(dbgImg, cv::Point(u_dS, v_dS), cv::Point(u_dT, v_dT), cv::Scalar(0,0,255), 10, CV_AA);
+					cv::line(dbgImg, cv::Point(u_dS, v_dS), cv::Point(u_dT, v_dT), cv::Scalar(0,0,255), 10, cv::LINE_AA);
 			}
 
 

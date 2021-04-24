@@ -78,14 +78,14 @@ PhotometricUndistorter::PhotometricUndistorter(
 	}
 	for(int i=0;i<256;i++) GInv[i] = GInvvec[i];
 
-	for(int i=0;i<255;i++)
-	{
-		if(GInv[i+1] <= GInv[i])
-		{
-			printf("PhotometricUndistorter: G invalid! it has to be strictly increasing, but it isnt!\n");
-			return;
-		}
-	}
+	// for(int i=0;i<255;i++)
+	// {
+	// 	if(GInv[i+1] <= GInv[i])
+	// 	{
+	// 		printf("PhotometricUndistorter: G invalid! it has to be strictly increasing, but it isnt!\n");
+	// 		return;
+	// 	}
+	// }
 	float min=GInv[0];
 	float max=GInv[255];
 	for(int i=0;i<256;i++) GInv[i] = 255.0 * (GInv[i] - min) / (max-min);			// make it to 0..255 => 0..255.
@@ -117,7 +117,7 @@ PhotometricUndistorter::PhotometricUndistorter(
 
 
 	printf("Reading Vignette Image from %s\n",vignetteImage.c_str());
-	cv::Mat vignetteMat = cv::imread(vignetteImage.c_str(), CV_LOAD_IMAGE_UNCHANGED);
+	cv::Mat vignetteMat = cv::imread(vignetteImage.c_str(), cv::IMREAD_UNCHANGED);
 	vignetteMap = new float[w*h];
 	vignetteMapInv = new float[w*h];
 	if(vignetteMat.rows != h || vignetteMat.cols != w)
