@@ -62,8 +62,9 @@ PhotometricUndistorter::PhotometricUndistorter(std::string file,
   std::string line;
   std::getline(f, line);
   std::istringstream l1i(line);
-  std::vector<float> GInvvec = std::vector<float>(
-      std::istream_iterator<float>(l1i), std::istream_iterator<float>());
+  std::vector<std::string> GInvvec =
+      std::vector<std::string>(std::istream_iterator<std::string>(l1i),
+                               std::istream_iterator<std::string>());
   if (GInvvec.size() != 256) {
     printf(
         "PhotometricUndistorter: invalid format! got %d entries in first line, "
@@ -71,7 +72,8 @@ PhotometricUndistorter::PhotometricUndistorter(std::string file,
         (int)GInvvec.size());
     return;
   }
-  for (int i = 0; i < 256; i++) GInv[i] = GInvvec[i];
+  for (int i = 0; i < 256; i++)
+    isnan(stof(GInvvec[i])) ? GInv[i] = 0 : GInv[i] = stof(GInvvec[i]);
 
   // for(int i=0;i<255;i++)
   // {
