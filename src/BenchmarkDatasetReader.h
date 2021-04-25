@@ -78,7 +78,7 @@ inline int getdir(std::string dir, std::vector<std::string>& files) {
 class DatasetReader {
  public:
   DatasetReader(std::string folder) {
-    this->path = folder;
+    folder.back() == '/' ? this->path = folder : this->path = folder + '/';
     for (int i = 0; i < 3; i++) {
       ziparchive = 0;
       undistorter = 0;
