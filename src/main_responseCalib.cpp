@@ -39,9 +39,10 @@
 #include "opencv2/video/tracking.hpp"
 
 int leakPadding = 2;
-int nits = 10;
+int nits = 10;  // number of iterations
 int skipFrames = 1;
 
+// 均方根误差
 Eigen::Vector2d rmse(double* G, double* E, std::vector<double>& exposureVec,
                      std::vector<unsigned char*>& dataVec, int wh) {
   long double e = 0;  // yeah - these will be sums of a LOT of values, so we
@@ -51,10 +52,10 @@ Eigen::Vector2d rmse(double* G, double* E, std::vector<double>& exposureVec,
   int n = dataVec.size();
   for (int i = 0; i < n; i++) {
     for (int k = 0; k < wh; k++) {
-      if (dataVec[i][k] == 255) continue;
-      double r = G[dataVec[i][k]] - exposureVec[i] * E[k];
+      if (dataVec[i][k] == 255) continue;                   // 跳过过曝点
+      double r = G[dataVec[i][k]] - exposureVec[i] * E[k];  // 光度误差
       if (!std::isfinite(r)) continue;
-      e += r * r * 1e-10;
+      e += r * r * 1e-10;  // imporve accuracy
       num++;
     }
   }
@@ -154,14 +155,15 @@ void parseArgument(char* arg) {
 int main(int argc, char** argv) {
   // parse arguments
   for (int i = 2; i < argc; i++) parseArgument(argv[i]);
-
   // load exposure times & images.
   // first parameter is dataset location.
-  int w = 0, h = 0, n = 0;
+
+  int w = 0, h = 0;  // width & height of images
+  int n;             // number of images
 
   DatasetReader* reader = new DatasetReader(argv[1]);
   std::vector<double> exposureVec;
-  std::vector<unsigned char*> dataVec;
+  std::vector<unsigned char*> dataVec;  // 各像素点灰度值
   for (int i = 0; i < reader->getNumImages(); i += skipFrames) {
     cv::Mat img = reader->getImageRaw_internal(i);
     if (img.rows == 0 || img.cols == 0) continue;
@@ -183,6 +185,7 @@ int main(int argc, char** argv) {
     dataVec.push_back(data);
     exposureVec.push_back((double)(reader->getExposure(i)));
 
+    // 将过曝点周围也设为过曝，类似膨胀。
     unsigned char* data2 = new unsigned char[img.rows * img.cols];
     for (int it = 0; it < leakPadding; it++) {
       memcpy(data2, data, img.rows * img.cols);
@@ -211,10 +214,11 @@ int main(int argc, char** argv) {
   printf("loaded %d images\n", n);
 
   double* E = new double[w * h];   // scene irradiance
-  double* En = new double[w * h];  // scene irradiance
-  double* G = new double[256];     // inverse response function
+  double* En = new double[w * h];  // number of pictures to calculate irradiance
+  double* G = new double[256];     // inverse response function (look-up table)
 
-  // set starting scene irradiance to mean of all images.
+  // set starting scene irradiance to mean of all pixels in all images (ignore
+  // exposure time).
   memset(E, 0, sizeof(double) * w * h);
   memset(En, 0, sizeof(double) * w * h);
   memset(G, 0, sizeof(double) * 256);
@@ -233,7 +237,8 @@ int main(int argc, char** argv) {
 
   std::ofstream logFile;
   logFile.open("photoCalibResult/log.txt", std::ios::trunc | std::ios::out);
-  logFile.precision(15);
+  logFile.precision(15);  // precision (the total number of digits both left and
+                          // right of the decimal) of numbers to be written.
 
   printf("init RMSE = %f! \t", rmse(G, E, exposureVec, dataVec, w * h)[0]);
   plotE(E, w, h, "photoCalibResult/E-0");
@@ -254,13 +259,14 @@ int main(int argc, char** argv) {
           int b = dataVec[i][k];
           if (b == 255) continue;
           GNum[b]++;
-          GSum[b] += E[k] * exposureVec[i];
+          GSum[b] +=
+              E[k] * exposureVec[i];  // 灰度值相同的像素点合并计算，G=E*t。
         }
       }
       for (int i = 0; i < 256; i++) {
         G[i] = GSum[i] / GNum[i];
         if (!std::isfinite(G[i]) && i > 1)
-          G[i] = G[i - 1] + (G[i - 1] - G[i - 2]);
+          G[i] = G[i - 1] + (G[i - 1] - G[i - 2]);  // 若G[i]非有限值，则外插。
       }
       delete[] GSum;
       delete[] GNum;
@@ -282,7 +288,7 @@ int main(int argc, char** argv) {
           int b = dataVec[i][k];
           if (b == 255) continue;
           ENum[k] += exposureVec[i] * exposureVec[i];
-          ESum[k] += (G[b]) * exposureVec[i];
+          ESum[k] += (G[b]) * exposureVec[i];  // E=(G*t)/(t^2)
         }
       }
       for (int i = 0; i < w * h; i++) {
