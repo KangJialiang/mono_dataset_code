@@ -60,7 +60,7 @@ EIGEN_ALWAYS_INLINE float getInterpolatedElement(const float* const mat,
   const float* bp = mat + ix + iy * width;
 
   float res = dxdy * bp[1 + width] + (dy - dxdy) * bp[width] +
-              (dx - dxdy) * bp[1] + (1 - dx - dy + dxdy) * bp[0];
+              (dx - dxdy) * bp[1] + (1 - dx - dy + dxdy) * bp[0];  // 双线性内插
 
   return res;
 }
@@ -181,6 +181,7 @@ int main(int argc, char** argv) {
   DatasetReader* reader = new DatasetReader(argv[1]);
   printf("SEQUENCE NAME: %s!\n", argv[1]);
 
+  // 供缩放用
   int w_out, h_out;
   // Eigen::Matrix3f K = reader->getUndistorter()->getK_rect();
   w_out = reader->getUndistorter()->getOutputDims()[0];
@@ -188,13 +189,18 @@ int main(int argc, char** argv) {
 
   // aruco::MarkerDetector MDetector;
 
+  // 校正响应、曝光时间、删去梯度过大像素点后的照片（未缩放）
   std::vector<float*> images;
+
+  // 网格坐标到校正畸变后的像素坐标（未缩放）
   std::vector<float*> p2imgX;
   std::vector<float*> p2imgY;
 
+  // input image width & height
   int wI = reader->getUndistorter()->getInputDims()[0];
   int hI = reader->getUndistorter()->getInputDims()[1];
 
+  // 初值设为所有照片曝光时间的平均值
   float meanExposure = 0;
   for (int i = 0; i < reader->getNumImages(); i += imageSkip)
     meanExposure += reader->getExposure(i);
@@ -209,10 +215,12 @@ int main(int argc, char** argv) {
     cv::Ptr<cv::aruco::Dictionary> arucoDict =
         cv::aruco::getPredefinedDictionary(cv::aruco::DICT_ARUCO_ORIGINAL);
 
-    ExposureImage* img = reader->getImage(i, true, false, false, false);
+    ExposureImage* img =
+        reader->getImage(i, true, false, false, false);  // 仅校正畸变
 
-    cv::Mat InImage;
-    cv::Mat(h_out, w_out, CV_32F, img->image).convertTo(InImage, CV_8U, 1, 0);
+    cv::Mat InImage;  // 缩放后的图像
+    cv::Mat(h_out, w_out, CV_32F, img->image)
+        .convertTo(InImage, CV_8U, 1, 0);  // 缩小待处理图像
     delete img;
 
     // MDetector.detect(InImage,Markers);
@@ -220,8 +228,8 @@ int main(int argc, char** argv) {
     cv::aruco::detectMarkers(InImage, arucoDict, markerCorners, markerIds);
     if (markerCorners.size() != 1) continue;
 
-    std::vector<cv::Point2f> ptsP;
-    std::vector<cv::Point2f> ptsI;
+    std::vector<cv::Point2f> ptsP;  // 缩放后的像素坐标
+    std::vector<cv::Point2f> ptsI;  // 平面坐标
     // ptsI.push_back(cv::Point2f(Markers[0][0].x, Markers[0][0].y));
     // ptsI.push_back(cv::Point2f(Markers[0][1].x, Markers[0][1].y));
     // ptsI.push_back(cv::Point2f(Markers[0][2].x, Markers[0][2].y));
@@ -233,6 +241,7 @@ int main(int argc, char** argv) {
     ptsP.push_back(cv::Point2f(-0.5, -0.5));
 
     cv::Mat Hcv = cv::findHomography(ptsP, ptsI);
+    // 缩放后的像素坐标->平面坐标
     Eigen::Matrix3f H;
     H(0, 0) = Hcv.at<double>(0, 0);
     H(0, 1) = Hcv.at<double>(0, 1);
@@ -244,6 +253,7 @@ int main(int argc, char** argv) {
     H(2, 1) = Hcv.at<double>(2, 1);
     H(2, 2) = Hcv.at<double>(2, 2);
 
+    // 仅校正响应
     ExposureImage* imgRaw = reader->getImage(i, false, true, false, false);
 
     float* plane2imgX = new float[gw * gh];
@@ -261,16 +271,18 @@ int main(int argc, char** argv) {
       }
 
     reader->getUndistorter()->distortCoordinates(plane2imgX, plane2imgY,
-                                                 gw * gh);
+                                                 gw * gh);  // 校正畸变及缩放
 
     if (imgRaw->exposure_time == 0) imgRaw->exposure_time = 1;
 
     float* image = new float[wI * hI];
     for (int y = 0; y < hI; y++)
       for (int x = 0; x < wI; x++)
-        image[x + y * wI] =
-            meanExposure * imgRaw->image[x + y * wI] / imgRaw->exposure_time;
+        image[x + y * wI] = meanExposure * imgRaw->image[x + y * wI] /
+                            imgRaw->exposure_time;  // 消去曝光时间
 
+    // remove pixels with absolute gradient larger than maxAbsGrad from the
+    // optimization.
     for (int y = 2; y < hI - 2; y++)
       for (int x = 2; x < wI - 2; x++) {
         for (int deltax = -2; deltax < 3; deltax++)
@@ -356,13 +368,13 @@ int main(int argc, char** argv) {
   logFile.open("vignetteCalibResult/log.txt", std::ios::trunc | std::ios::out);
   logFile.precision(15);
 
-  int n = images.size();
-  float* planeColor = new float[gw * gh];
-  float* planeColorFF = new float[gw * gh];
-  float* planeColorFC = new float[gw * gh];
-  float* vignetteFactor = new float[hI * wI];
-  float* vignetteFactorTT = new float[hI * wI];
-  float* vignetteFactorCT = new float[hI * wI];
+  int n = images.size();                         // number of images
+  float* planeColor = new float[gw * gh];        // 场景辐射率
+  float* planeColorFF = new float[gw * gh];      // 晕影^2
+  float* planeColorFC = new float[gw * gh];      // 晕影*辐射率
+  float* vignetteFactor = new float[hI * wI];    // 晕影
+  float* vignetteFactorTT = new float[hI * wI];  // 晕影^2
+  float* vignetteFactorCT = new float[hI * wI];  // 晕影*辐射率
 
   // initialize vignette factors to 1.
   for (int i = 0; i < hI * wI; i++) vignetteFactor[i] = 1;
@@ -385,8 +397,8 @@ int main(int argc, char** argv) {
     {
       float* plane2imgX = p2imgX[img];
       float* plane2imgY = p2imgY[img];
+      //校正响应、曝光时间、删去梯度过大像素点后的照片（未缩放）
       float* image = images[img];
-
       for (int pi = 0; pi < gw * gh; pi++)  // for all plane points
       {
         if (isnanf(plane2imgX[pi])) continue;
@@ -400,8 +412,10 @@ int main(int argc, char** argv) {
         if (isnanf(fac)) continue;
         if (isnanf(color)) continue;
 
-        double residual = (double)((color - planeColor[pi] * fac) *
-                                   (color - planeColor[pi] * fac));
+        // [rɪˈzɪdjuəl]
+        double residual =
+            (double)((color - planeColor[pi] * fac) *
+                     (color - planeColor[pi] * fac));  // planeColor未初始化？
         if (abs(residual) > oth2) {
           E += oth2;
           R++;
@@ -468,6 +482,7 @@ int main(int argc, char** argv) {
         float dy = y - iy;
         float dxdy = dx * dy;
 
+        // 双线性插值
         vignetteFactorTT[ix + iy * wI + 0] +=
             (1 - dx - dy + dxdy) * colorPlane * colorPlane;
         vignetteFactorTT[ix + iy * wI + 1] +=
@@ -506,7 +521,8 @@ int main(int argc, char** argv) {
     printf("%f residual terms => %f\n", R, sqrtf(E / R));
 
     // normalize to vignette max. factor 1.
-    for (int pi = 0; pi < hI * wI; pi++) vignetteFactor[pi] /= maxFac;
+    for (int pi = 0; pi < hI * wI; pi++)
+      vignetteFactor[pi] /= maxFac;  // 归一化
 
     logFile << it << " " << n << " " << R << " " << sqrtf(E / R) << "\n";
 
